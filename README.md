@@ -7,6 +7,12 @@ version numbers.
 
 * `bucket`: *Required.* The name of the bucket.
 
+* `signatures_bucket`: *Required.* The signature file for each detected/created
+   blob will appear in this bucket.
+
+* `signature_postfix`: *Optional.* The signature file for each detected/created
+   blob will have this string appended to the filename of the original blob.
+
 * `access_key_id`: *Optional.* The AWS access key to use when accessing the
   bucket.
 
@@ -38,7 +44,6 @@ version numbers.
 * `sse_kms_key_id`: *Optional.* The ID of the AWS KMS master encryption key
   used for the object.
 
-
 * `use_v2_signing`: *Optional.* Use signature v2 signing, useful for S3 compatible providers that do not support v4.
 
 ### File Names
@@ -67,8 +72,16 @@ Objects will be found via the pattern configured by `regexp`. The versions
 will be used to order them (using [semver](http://semver.org/)). Each
 object's filename is the resulting version.
 
+A found object will only report a version if there is a matching file in
+`signatures_bucket` whose filename is the object's name postfixed with
+`signature_postfix`.
 
 ### `in`: Fetch an object from the bucket.
+
+A blob and signature file will be downloaded, the latter used to verify the
+authenticity of the blob's bits using the `public_key` param. If validation
+fails, the `get` step will error. The signature file is not persisted on the
+rendered volume.
 
 Places the following files in the destination:
 
@@ -81,8 +94,7 @@ Places the following files in the destination:
 
 #### Parameters
 
-*None.*
-
+* `public_key`: *Required.* The public key PEM to verify signatures with.
 
 ### `out`: Upload an object to the bucket.
 
@@ -90,6 +102,11 @@ Given a file specified by `file`, upload it to the S3 bucket. If `regexp` is
 specified, the new file will be uploaded to the directory that the regex
 searches in. If `versioned_file` is specified, the new file will be uploaded as
 a new version of that file.
+
+Before uploading, the file will be signed and a signature file will be uploaded
+to `signatures_bucket`. If your `signatures_bucket` is the same as your `bucket`
+you must provide a `signature_postfix` to distinguish the signature's filename.
+The signing key provided in the `private_key` param will be used for signing.
 
 #### Parameters
 
@@ -99,9 +116,11 @@ a new version of that file.
   in the resource definition. The matching syntax is bash glob expansion, so
   no capture groups, etc.
 
+* `private_key` *Required.* The private key in PEM format to sign the blob with.
+
 * `acl`: *Optional.*  [Canned Acl](http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html)
   for the uploaded object.
-  
+
 * `content_type`: *Optional.* MIME [Content-Type](https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.17)
   describing the contents of the uploaded object
 
@@ -114,6 +133,7 @@ a new version of that file.
   type: s3
   source:
     bucket: releases
+    signatures_bucket: releases_authority
     regexp: directory_on_s3/release-(.*).tgz
     access_key_id: ACCESS-KEY
     secret_access_key: SECRET
@@ -123,12 +143,21 @@ a new version of that file.
 
 ``` yaml
 - get: release
+  params:
+    public_key: |
+      -----BEGIN PUBLIC KEY-----
+      ...
+      -----END PUBLIC KEY-----
 ```
 
 ``` yaml
 - put: release
   params:
     file: path/to/release-*.tgz
+    public_key: |
+      -----BEGIN PRIVATE KEY-----
+      ...
+      -----END PRIVATE KEY-----
     acl: public-read
 ```
 
