@@ -1,3 +1,4 @@
 built-*
 *.test
 assets/*
+.idea*

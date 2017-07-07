@@ -86,6 +86,40 @@ func (command *InCommand) inByRegex(destinationDir string, request InRequest) (I
 		return InResponse{}, err
 	}
 
+	err = command.downloadFile(
+		request.Source.Bucket,
+		remotePath + ".sig",
+		"",
+		destinationDir,
+		"signature",
+	)
+	if err != nil {
+		return InResponse{}, err
+	}
+
+	downloadedFilePath := filepath.Join(destinationDir, path.Base(remotePath))
+	downloadedSignatureFilePath := downloadedFilePath + ".sig"
+
+	verifier, err := s3resource.ParsePublicKey([]byte(request.Source.PublicKey))
+	if err != nil {
+		return InResponse{}, err
+	}
+
+	downloadedFileContent, err := ioutil.ReadFile(downloadedFilePath)
+	if err != nil {
+		return InResponse{}, err
+	}
+
+	downloadedSignatureFileContent, err := ioutil.ReadFile(downloadedSignatureFilePath)
+	if err != nil {
+		return InResponse{}, err
+	}
+
+	err = verifier.Verify(downloadedFileContent, downloadedSignatureFileContent)
+	if err != nil {
+		return InResponse{}, err
+	}
+
 	url := command.urlProvider.GetURL(request, remotePath)
 	err = command.writeURLFile(
 		destinationDir,

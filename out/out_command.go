@@ -12,6 +12,7 @@ import (
 	"github.com/concourse/s3-resource"
 	"github.com/concourse/s3-resource/versions"
 	"github.com/fatih/color"
+	ioutil "io/ioutil"
 )
 
 var ErrObjectVersioningNotEnabled = errors.New("object versioning not enabled")
@@ -64,6 +65,37 @@ func (command *OutCommand) Run(sourceDir string, request OutRequest) (OutRespons
 	options.ContentType = request.Params.ContentType
 	options.ServerSideEncryption = request.Source.ServerSideEncryption
 	options.KmsKeyId = request.Source.SSEKMSKeyId
+
+	fileContent, err := ioutil.ReadFile(localPath)
+	if err != nil {
+		return OutResponse{}, err
+	}
+
+	signer, err := s3resource.ParsePrivateKey([]byte(request.Source.PrivateKey))
+	if err != nil {
+		return OutResponse{}, err
+	}
+
+	signature, err := signer.Sign(fileContent)
+	if err != nil {
+		return OutResponse{}, err
+	}
+
+	localSignaturePath := "/tmp/signature.sig"
+	err = ioutil.WriteFile(localSignaturePath, signature, 0644)
+	if err != nil {
+		return OutResponse{}, err
+	}
+
+	_, err = command.s3client.UploadFile(
+		bucketName,
+		remotePath + ".sig",
+		localSignaturePath,
+		options,
+	)
+	if err != nil {
+		return OutResponse{}, err
+	}
 
 	versionID, err := command.s3client.UploadFile(
 		bucketName,

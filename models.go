@@ -14,6 +14,8 @@ type Source struct {
 	ServerSideEncryption string `json:"server_side_encryption"`
 	SSEKMSKeyId          string `json:"sse_kms_key_id"`
 	UseV2Signing         bool   `json:"use_v2_signing"`
+	PrivateKey					 string `json:"private_key"`
+	PublicKey						 string `json:"public_key"`
 }
 
 func (source Source) IsValid() (bool, string) {
