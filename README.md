@@ -7,6 +7,13 @@ version numbers.
 
 * `bucket`: *Required.* The name of the bucket.
 
+* `public_key`: *Required.* PEM-encoded public key to verify blob signatures
+  against (i.e. identity key of the original artifact author). Needed for
+  all GETs, and so needed for PUTs due to implicit get.
+
+* `private_key`: *Optional.* PEM-encoded private key to use for signing, if
+  you want to do any PUTs. Not required if you are only consuming blobs.
+  
 * `access_key_id`: *Optional.* The AWS access key to use when accessing the
   bucket.
 
@@ -79,6 +86,9 @@ Places the following files in the destination:
 
 * `version`: The version identified in the file name.
 
+* `signature`: The signature file acquired along with the blob which validates
+  the authenticity of the blob.
+
 #### Parameters
 
 *None.*
@@ -110,23 +120,42 @@ a new version of that file.
 ### Resource
 
 ``` yaml
-- name: release
-  type: s3
+# in both pipelines
+resource_types:
+- name: verifying-s3
+  type: docker
+  repository:
+    cdutrapivotal/verifying-s3-resource
+
+# in my pipeline which builds artifacts
+resources:
+- name: release-publisher
+  type: verifying-s3
   source:
     bucket: releases
     regexp: directory_on_s3/release-(.*).tgz
     access_key_id: ACCESS-KEY
     secret_access_key: SECRET
+    private_key: ANOTHER SECRET
+    public_key: NOT SO SECRET
+    
+# in my friend's pipeline which consumes artifacts
+- name: release-consumer
+  type: verifying-s3
+  source:
+    bucket: releases
+    regexp: directory_on_s3/release-(.*).tgz
+    public_key: NOT SO SECRET
 ```
 
 ### Plan
 
 ``` yaml
-- get: release
+- get: release-publisher
 ```
 
 ``` yaml
-- put: release
+- put: release-consumer
   params:
     file: path/to/release-*.tgz
     acl: public-read
